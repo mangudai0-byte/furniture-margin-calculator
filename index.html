@@ -127,6 +127,14 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
 .mbar i.neg{background:var(--bad)}
 .linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:14px;text-align:left}
 .linkbtn:hover{text-decoration:underline}
+.conn{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.conn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.conn.err{border-color:var(--bad);color:var(--bad)}
+.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:6px;background:var(--line);vertical-align:1px}
+.tabs .dot.on{background:var(--accent)}
+.state{margin:0;font-weight:600}
+.copyrow{display:flex;gap:8px}
+.copyrow input{font-family:var(--f-num);font-size:12px}
 .backup{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;
   padding:12px 14px;margin-bottom:14px;border:1px dashed var(--line);border-radius:8px}
 .backup b{font-size:14px;margin-right:8px}
@@ -140,14 +148,16 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
   <header>
     <div>
       <h1>가구공사 마진계산기</h1>
-      <p class="sub">현장별로 계산하고 저장해 두면, 목록과 업체별 분석에서 모아 볼 수 있습니다. 저장한 현장은 이 브라우저에 보관됩니다.</p>
+      <p class="sub">현장별로 계산하고 저장해 두면, 목록과 업체별 분석에서 모아 볼 수 있습니다.</p>
     </div>
+    <div class="conn" id="connPill">이 기기에만 저장</div>
   </header>
 
   <nav class="tabs" aria-label="화면">
     <a href="#calc" data-tab="calc">계산</a>
     <a href="#list" data-tab="list">현장 목록<span class="cnt" id="cntAll"></span></a>
     <a href="#company" data-tab="company">업체별 분석</a>
+    <a href="#share" data-tab="share">공용 저장소<span class="dot" id="shareDot"></span></a>
   </nav>
 
   <p class="status" id="dbStatus" hidden></p>
@@ -270,11 +280,46 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
       <p class="note">이익률은 업체의 순마진 합계 ÷ 총공사금액 합계입니다. 업체 이름을 누르면 그 업체의 현장 목록으로 이동합니다.</p>
     </section>
   </div>
+  <!-- 공용 저장소 -->
+  <div id="view-share" hidden>
+    <div class="stack" style="max-width:640px">
+      <section>
+        <h2>연결 상태</h2>
+        <p id="shareState" class="state"></p>
+        <p class="hint" id="shareSync"></p>
+      </section>
+      <section>
+        <h2>공용 저장소 연결</h2>
+        <p class="hint" style="margin:0 0 12px">구글 스프레드시트에 만든 웹 앱 주소와 팀 코드를 넣으면, 모든 직원이 같은 현장 목록과 PB 단가를 함께 씁니다. 직원은 관리자가 보내 준 연결 링크를 열면 아래 칸이 자동으로 채워집니다.</p>
+        <div class="stack" style="gap:12px">
+          <label class="f">웹 앱 주소<input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></label>
+          <label class="f">팀 코드<input id="cfgCode" type="password" autocomplete="off"></label>
+          <label class="f">내 이름 (저장한 사람으로 기록됩니다)<input id="cfgName" type="text" placeholder="예: 김대리" autocomplete="name"></label>
+          <div class="actions">
+            <button type="button" class="primary" id="connectBtn">연결하기</button>
+            <button type="button" id="disconnectBtn" hidden>연결 해제</button>
+          </div>
+          <div class="toast" id="cfgMsg" role="status"></div>
+        </div>
+      </section>
+      <section id="inviteBox" hidden>
+        <h2>직원에게 보낼 연결 링크</h2>
+        <p class="hint" style="margin:0 0 10px">이 링크에는 팀 코드가 들어 있습니다. 직원에게만 보내 주세요. 링크를 열면 이름만 적고 바로 쓸 수 있습니다.</p>
+        <div class="copyrow"><input id="inviteLink" type="text" readonly><button type="button" id="copyInvite">복사</button></div>
+      </section>
+      <section id="migrateBox" hidden>
+        <h2>이 기기에만 있던 현장</h2>
+        <p class="hint" style="margin:0 0 10px" id="migrateText"></p>
+        <button type="button" id="migrateBtn">공용 저장소로 올리기</button>
+        <div class="toast" id="migrateMsg" role="status"></div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <script>
 (function(){
-  const DRAFT='furn-margin-v1', PKEY='furn-margin-prices-v1', LKEY='furn-margin-projects-local';
+  const DRAFT='furn-margin-v1', PKEY='furn-margin-prices-v1', LKEY='furn-margin-projects-local', CKEY='furn-margin-remote-v1', RKEY='furn-margin-remote-cache';
   const DEF_PRICES={p15:70000,p18:80000,pura:39000,rate:5};
   const EXAMPLE={date:today(),company:'예시) 한빛인테리어',site:'예시) 아산 OO아파트 101동 1203호',
     contract:12000000,q15:20,q18:35,qura:15,md:800000,opt:650000,marble:1200000,labor:2500000};
@@ -295,7 +340,7 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
   let projects=[];      // [{id,...}]
   let editingId=null;
   let prices=Object.assign({},DEF_PRICES,lget(PKEY)||{});
-  let store=null;       // db or null
+  let remote=null;      // {url,code,name} 공용 저장소 설정
 
   /* ---------- 계산 ---------- */
   function setVal(id,v){
@@ -362,7 +407,7 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
   function savePrices(){
     prices={p15:val('p15'),p18:val('p18'),pura:val('pura'),rate:val('rate')};
     lset(PKEY,prices);
-    if(store){clearTimeout(priceTimer);priceTimer=setTimeout(()=>{store.doc('settings/prices').set(prices).catch(()=>{})},800)}
+    if(remote){clearTimeout(priceTimer);priceTimer=setTimeout(()=>{api('prices',{prices}).then(applyRemote).catch(netErr)},1200)}
   }
 
   let saving=false;
@@ -372,27 +417,62 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
     if(!d.company.trim()||!d.site.trim()){toast('업체와 현장명을 입력해야 저장할 수 있습니다.',true);return}
     const c=compute(d);
     const rec=Object.assign({},d,{company:d.company.trim(),site:d.site.trim(),pb:c.pb,hw:c.hw,cost:c.cost,margin:c.margin,updatedAt:new Date().toISOString()});
-    saving=true;$('saveBtn').disabled=true;
+    saving=true;$('saveBtn').disabled=true;$('saveBtn').textContent='저장 중…';
     try{
       const id=editingId||('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
       await putProject(id,rec);
       editingId=id; updateEditBar();
-      toast('저장했습니다. 현장 목록에서 볼 수 있습니다.');
+      toast(remote?'공용 저장소에 저장했습니다. 다른 직원도 목록에서 볼 수 있습니다.':'이 기기에 저장했습니다. 현장 목록에서 볼 수 있습니다.');
     }catch(e){
-      toast(e&&e.code==='quota_exceeded'?'저장 공간이 가득 찼습니다. 오래된 현장을 삭제한 뒤 다시 저장하세요.':'저장하지 못했습니다. 잠시 후 다시 눌러 주세요.',true);
-    }finally{saving=false;$('saveBtn').disabled=false}
+      toast(e&&e.code==='bad_code'?'팀 코드가 맞지 않아 저장하지 못했습니다. 공용 저장소 탭을 확인하세요.':'저장하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',true);
+    }finally{saving=false;$('saveBtn').disabled=false;updateEditBar()}
   });
   $('newBtn').addEventListener('click',newProject);
   $('newBtn2').addEventListener('click',newProject);
 
   /* ---------- 저장소 ---------- */
-  async function putProject(id,rec){
-    if(store){await store.collection('projects').doc(id).set(rec)}
-    else{const i=projects.findIndex(p=>p.id===id);const r=Object.assign({id},rec);
-      if(i>=0)projects[i]=r;else projects.push(r);lset(LKEY,projects);onProjects()}
+  async function api(action,payload){
+    const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),25000);
+    try{
+      let res;
+      if(action==='load'){
+        res=await fetch(remote.url+(remote.url.includes('?')?'&':'?')+'code='+encodeURIComponent(remote.code)+'&t='+Date.now(),{signal:ctl.signal});
+      }else{
+        res=await fetch(remote.url,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify(Object.assign({code:remote.code,action},payload))});
+      }
+      const j=await res.json();
+      if(!j.ok){const e=new Error(j.error);e.code=j.error;throw e}
+      return j;
+    }catch(e){if(!e.code)e.code='network';throw e}
+    finally{clearTimeout(t)}
+  }
+  let lastSync=null;
+  function applyRemote(j){
+    projects=(j.projects||[]).map(p=>Object.assign({},p));
+    lset(RKEY,projects);
+    if(j.prices){prices=Object.assign({},DEF_PRICES,j.prices);lset(PKEY,prices);
+      const ae=document.activeElement&&document.activeElement.id;
+      if(!editingId&&!priceIds.includes(ae)){priceIds.forEach(k=>setVal(k,prices[k]));calc()}}
+    lastSync=new Date(); setConn('on'); onProjects(); renderShare();
+  }
+  function netErr(e){
+    setConn('err');
+    alertBar(e&&e.code==='bad_code'?'팀 코드가 맞지 않습니다. 공용 저장소 탭에서 코드를 확인하세요.':'공용 저장소에 연결하지 못했습니다. 인터넷 연결을 확인하세요. 화면에는 마지막으로 불러온 목록이 보입니다.');
+  }
+  async function refresh(){if(!remote)return;try{applyRemote(await api('load'));alertBar('')}catch(e){netErr(e)}}
+  async function putProject(id,rec){return putProjects([Object.assign({id},rec)])}
+  async function putProjects(list){
+    if(remote){
+      const j=await api('save',{projects:list.map(p=>Object.assign({author:remote.name||''},p))});
+      applyRemote(j);
+    }else{
+      list.forEach(r=>{const i=projects.findIndex(p=>p.id===r.id);if(i>=0)projects[i]=r;else projects.push(r)});
+      lset(LKEY,projects);onProjects();
+    }
   }
   async function delProject(id){
-    if(store){await store.collection('projects').doc(id).delete()}
+    if(remote){applyRemote(await api('delete',{id}))}
     else{projects=projects.filter(p=>p.id!==id);lset(LKEY,projects);onProjects()}
     if(editingId===id){editingId=null;updateEditBar()}
   }
@@ -433,7 +513,7 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
         ?'<button type="button" class="danger" data-delok="'+esc(p.id)+'">삭제 확인</button> <button type="button" data-delno="1">취소</button>'
         :'<button type="button" class="danger" data-del="'+esc(p.id)+'">삭제</button>';
       return '<tr class="click" data-open="'+esc(p.id)+'"><td class="n" style="text-align:left">'+esc(p.date)+'</td>'+
-        '<td class="sitecell">'+esc(p.site)+'<small>'+esc(p.company)+'</small></td>'+
+        '<td class="sitecell">'+esc(p.site)+'<small>'+esc(p.company)+(p.author?' · '+esc(p.author):'')+'</small></td>'+
         '<td class="n">'+fmt(parse(p.contract))+'</td><td class="n">'+fmt(parse(p.cost))+'</td>'+
         '<td class="n '+(m<0?'neg':'')+'">'+fmt(m)+'</td><td class="r">'+ratePill(m,parse(p.contract))+'</td>'+
         '<td class="r" style="white-space:nowrap">'+del+'</td></tr>';
@@ -471,15 +551,16 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
     let data;
     try{data=JSON.parse(await f.text())}catch(err){backupMsg('파일을 읽지 못했습니다. 이 계산기에서 내보낸 .json 백업 파일인지 확인하세요.',true);return}
     if(!data||data.app!=='furniture-margin-calculator'||!Array.isArray(data.projects)){backupMsg('이 계산기의 백업 파일이 아닙니다.',true);return}
-    let added=0,updated=0,kept=0;
+    let added=0,updated=0,kept=0; const list=[];
     for(const p of data.projects){
       if(!p||!p.id)continue;
       const cur=projects.find(x=>x.id===p.id);
       if(cur&&(cur.updatedAt||'')>=(p.updatedAt||'')){kept++;continue}
-      const {id,...rec}=p;
-      try{await putProject(id,rec);cur?updated++:added++}catch(err){}
+      list.push(Object.assign({},p,{onlyIfNewer:true})); cur?updated++:added++;
     }
-    if(data.prices&&!lget(PKEY)){prices=Object.assign({},DEF_PRICES,data.prices);lset(PKEY,prices);
+    if(list.length){backupMsg('불러오는 중…');
+      try{await putProjects(list)}catch(err){backupMsg('불러오지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요.',true);return}}
+    if(data.prices&&!lget(PKEY)&&!remote){prices=Object.assign({},DEF_PRICES,data.prices);lset(PKEY,prices);
       if(!editingId)priceIds.forEach(k=>setVal(k,prices[k]));calc()}
     backupMsg('불러오기 완료: 새 현장 '+added+'건, 갱신 '+updated+'건'+(kept?', 이미 최신이라 건너뜀 '+kept+'건':'')+'.');
   });
@@ -517,46 +598,98 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
 
   /* ---------- 탭 ---------- */
   function route(){
-    const t=['calc','list','company'].includes(location.hash.slice(1))?location.hash.slice(1):'calc';
-    ['calc','list','company'].forEach(k=>$('view-'+k).hidden=k!==t);
+    const t=['calc','list','company','share'].includes(location.hash.slice(1))?location.hash.slice(1):'calc';
+    ['calc','list','company','share'].forEach(k=>$('view-'+k).hidden=k!==t);
     document.querySelectorAll('.tabs a').forEach(a=>{if(a.dataset.tab===t)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   }
   window.addEventListener('hashchange',route);
 
   function alertBar(msg){const s=$('dbStatus');s.textContent=msg;s.hidden=!msg}
 
+  /* ---------- 공용 저장소 화면 ---------- */
+  function setConn(state){
+    const p=$('connPill');
+    p.className='conn'+(state==='on'?' on':state==='err'?' err':'');
+    p.textContent=!remote?'이 기기에만 저장':state==='err'?'공용 저장소 연결 안 됨':'공용 저장소 연결됨';
+    $('shareDot').className='dot'+(remote&&state!=='err'?' on':'');
+  }
+  function b64e(o){return btoa(unescape(encodeURIComponent(JSON.stringify(o))))}
+  function b64d(t){return JSON.parse(decodeURIComponent(escape(atob(t))))}
+  function renderShare(){
+    $('cfgUrl').value=remote?remote.url:$('cfgUrl').value;
+    if(remote){$('cfgCode').value=remote.code;$('cfgName').value=remote.name||''}
+    $('disconnectBtn').hidden=!remote;
+    $('connectBtn').textContent=remote?'다시 연결 / 이름 저장':'연결하기';
+    $('shareState').textContent=remote?'공용 저장소에 연결되어 있습니다. 저장한 현장과 단가가 모든 직원에게 공유됩니다.':'연결되어 있지 않습니다. 지금은 이 기기에만 저장됩니다.';
+    $('shareState').className='state '+(remote?'pos':'');
+    $('shareSync').textContent=remote&&lastSync?'마지막으로 불러온 시각 '+lastSync.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' · 1분마다 자동으로 새로 불러옵니다.':'';
+    $('inviteBox').hidden=!remote;
+    if(remote)$('inviteLink').value=location.origin+location.pathname+'?connect='+encodeURIComponent(b64e({u:remote.url,c:remote.code}));
+    const local=lget(LKEY)||[];
+    $('migrateBox').hidden=!(remote&&local.length);
+    $('migrateText').textContent='연결하기 전에 이 기기에 저장한 현장이 '+local.length+'건 있습니다. 공용 저장소로 올리면 모두가 볼 수 있습니다.';
+  }
+  function cfgMsg(m,bad){const t=$('cfgMsg');t.textContent=m;t.className='toast'+(bad?' neg':'')}
+  async function connect(cfg){
+    const prev=remote; remote=cfg;
+    cfgMsg('연결하는 중…');
+    try{
+      const j=await api('load');
+      lset(CKEY,remote); applyRemote(j); alertBar('');
+      cfgMsg('연결했습니다. 현장 '+(j.projects||[]).length+'건을 불러왔습니다.');
+      return true;
+    }catch(e){
+      remote=prev;
+      cfgMsg(e.code==='bad_code'?'팀 코드가 맞지 않습니다.':'연결하지 못했습니다. 웹 앱 주소가 맞는지, 배포 시 액세스 권한을 "모든 사용자"로 했는지 확인하세요.',true);
+      return false;
+    }
+  }
+  $('connectBtn').addEventListener('click',()=>{
+    const url=$('cfgUrl').value.trim(), code=$('cfgCode').value.trim(), name=$('cfgName').value.trim();
+    if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)){cfgMsg('웹 앱 주소는 https://script.google.com/ 으로 시작해야 합니다.',true);return}
+    if(!code){cfgMsg('팀 코드를 입력하세요.',true);return}
+    connect({url,code,name});
+  });
+  $('disconnectBtn').addEventListener('click',()=>{
+    remote=null; try{localStorage.removeItem(CKEY);localStorage.removeItem(RKEY)}catch(e){}
+    projects=lget(LKEY)||[]; setConn(); onProjects(); renderShare(); alertBar('');
+    cfgMsg('연결을 해제했습니다. 이제 이 기기에만 저장됩니다.');
+  });
+  $('copyInvite').addEventListener('click',async()=>{
+    const el=$('inviteLink');
+    try{await navigator.clipboard.writeText(el.value);$('copyInvite').textContent='복사됨'}
+    catch(e){el.focus();el.select();$('copyInvite').textContent='선택됨 · Ctrl+C'}
+    setTimeout(()=>$('copyInvite').textContent='복사',2000);
+  });
+  $('migrateBtn').addEventListener('click',async()=>{
+    const local=lget(LKEY)||[]; if(!local.length)return;
+    $('migrateBtn').disabled=true; $('migrateMsg').textContent='올리는 중…';
+    try{await putProjects(local.map(p=>Object.assign({},p,{onlyIfNewer:true})));lset(LKEY,[]);
+      $('migrateMsg').textContent=local.length+'건을 올렸습니다.';renderShare()}
+    catch(e){$('migrateMsg').textContent='올리지 못했습니다. 다시 시도하세요.'}
+    finally{$('migrateBtn').disabled=false}
+  });
+
   /* ---------- 시작 ---------- */
   const draft=lget(DRAFT);
   if(draft){editingId=draft.editingId||null;fillForm(draft)}
   else fillForm(Object.assign({},EXAMPLE,prices));
-  route();
-  projects=(lget(LKEY)||[]); onProjects();
 
-  (async()=>{
-    let db=null;
-    try{db=window.claude&&window.claude.use?await window.claude.use('db'):null}catch(e){db=null}
-    if(!db){if(window.claude)alertBar('이 화면에서는 서버 저장소를 쓸 수 없어 이 브라우저에만 저장합니다.');return}
-    store=db;
-    const localOnly=lget(LKEY)||[];
-    projects=[]; onProjects();
-    let timer=setTimeout(()=>alertBar('저장된 현장을 불러오는 중입니다. 연결이 느리면 잠시 뒤 다시 열어 보세요.'),10000);
-    db.doc('settings/prices').get().then(s=>{
-      if(s.exists&&!editingId&&!lget(PKEY)){prices=Object.assign({},DEF_PRICES,s.data());}
-      else if(s.exists){prices=Object.assign({},DEF_PRICES,s.data())}
-    }).catch(()=>{});
-    db.collection('projects').onSnapshot(snap=>{
-      projects=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
-      if(!snap.metadata.fromCache){clearTimeout(timer);alertBar('')}
-      onProjects();
-      if(localOnly.length&&!snap.metadata.fromCache){ // 이전에 브라우저에만 저장된 현장 옮기기
-        const ids=new Set(projects.map(p=>p.id)); const list=localOnly.splice(0);
-        (async()=>{for(const p of list){if(!ids.has(p.id)){const {id,...rec}=p;try{await db.collection('projects').doc(id).set(rec)}catch(e){}}}lset(LKEY,[])})();
-      }
-    },err=>{clearTimeout(timer);
-      store=null; projects=lget(LKEY)||[]; onProjects();
-      alertBar(err&&err.code==='revoked'?'저장소 접근 권한이 없어 이 브라우저에만 저장합니다.':'서버 저장소에 연결하지 못해 이 브라우저에만 저장합니다.');
-    });
-  })();
+  remote=lget(CKEY);
+  const qp=new URLSearchParams(location.search).get('connect');
+  if(qp){
+    history.replaceState(null,'',location.pathname+'#share');
+    try{const c=b64d(qp);
+      const name=(remote&&remote.name)||'';
+      $('cfgUrl').value=c.u; $('cfgCode').value=c.c; $('cfgName').value=name;
+      connect({url:c.u,code:c.c,name}).then(ok=>{if(ok){cfgMsg(name?'연결했습니다.':'연결했습니다. 아래에 이름을 적고 “다시 연결 / 이름 저장”을 눌러 주세요.');$('cfgName').focus()}});
+    }catch(e){cfgMsg('연결 링크가 올바르지 않습니다. 링크를 다시 받아 주세요.',true)}
+  }
+  route();
+  if(remote){projects=lget(RKEY)||[];setConn();onProjects();renderShare();if(!qp)refresh()}
+  else{projects=lget(LKEY)||[];setConn();onProjects();renderShare()}
+  setInterval(()=>{if(remote&&document.visibilityState==='visible')refresh()},60000);
+  document.addEventListener('visibilitychange',()=>{if(remote&&document.visibilityState==='visible'&&(!lastSync||Date.now()-lastSync>15000))refresh()});
 })();
 </script>
 
