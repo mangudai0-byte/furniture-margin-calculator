@@ -127,6 +127,11 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
 .mbar i.neg{background:var(--bad)}
 .linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:14px;text-align:left}
 .linkbtn:hover{text-decoration:underline}
+.backup{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;
+  padding:12px 14px;margin-bottom:14px;border:1px dashed var(--line);border-radius:8px}
+.backup b{font-size:14px;margin-right:8px}
+.backup .toast{flex-basis:100%;margin:0;min-height:0}
+.backup .toast:empty{display:none}
 </style>
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 </head>
@@ -222,6 +227,15 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
         <label class="f">업체<select id="fCompany"><option value="">전체 업체</option></select></label>
         <label class="f">연도<select id="fYear"><option value="">전체 기간</option></select></label>
         <label class="f">검색<input id="fSearch" type="search" placeholder="현장명 검색"></label>
+      </div>
+      <div class="backup">
+        <div><b>백업</b><span class="hint">현장 목록과 PB 단가를 파일로 내보내고, 다른 기기에서 불러올 수 있습니다.</span></div>
+        <div class="actions">
+          <button type="button" id="exportBtn">백업 파일 내보내기</button>
+          <button type="button" id="importBtn">백업 파일 불러오기</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+        <div class="toast" id="backupMsg" role="status"></div>
       </div>
       <div class="tablebox">
         <table>
@@ -439,6 +453,36 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
   });
   ['fCompany','fYear'].forEach(id=>$(id).addEventListener('change',renderList));
   $('fSearch').addEventListener('input',renderList);
+
+  /* ---------- 백업 ---------- */
+  function backupMsg(msg,bad){const t=$('backupMsg');t.textContent=msg;t.className='toast'+(bad?' neg':'')}
+  $('exportBtn').addEventListener('click',()=>{
+    if(!projects.length){backupMsg('내보낼 현장이 없습니다. 먼저 현장을 저장하세요.',true);return}
+    const data={app:'furniture-margin-calculator',version:1,exportedAt:new Date().toISOString(),prices,projects};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='마진계산기-백업-'+today()+'.json';document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+    backupMsg('현장 '+projects.length+'건을 파일로 내보냈습니다. 다운로드 폴더를 확인하세요.');
+  });
+  $('importBtn').addEventListener('click',()=>$('importFile').click());
+  $('importFile').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f)return;
+    let data;
+    try{data=JSON.parse(await f.text())}catch(err){backupMsg('파일을 읽지 못했습니다. 이 계산기에서 내보낸 .json 백업 파일인지 확인하세요.',true);return}
+    if(!data||data.app!=='furniture-margin-calculator'||!Array.isArray(data.projects)){backupMsg('이 계산기의 백업 파일이 아닙니다.',true);return}
+    let added=0,updated=0,kept=0;
+    for(const p of data.projects){
+      if(!p||!p.id)continue;
+      const cur=projects.find(x=>x.id===p.id);
+      if(cur&&(cur.updatedAt||'')>=(p.updatedAt||'')){kept++;continue}
+      const {id,...rec}=p;
+      try{await putProject(id,rec);cur?updated++:added++}catch(err){}
+    }
+    if(data.prices&&!lget(PKEY)){prices=Object.assign({},DEF_PRICES,data.prices);lset(PKEY,prices);
+      if(!editingId)priceIds.forEach(k=>setVal(k,prices[k]));calc()}
+    backupMsg('불러오기 완료: 새 현장 '+added+'건, 갱신 '+updated+'건'+(kept?', 이미 최신이라 건너뜀 '+kept+'건':'')+'.');
+  });
 
   /* ---------- 업체별 분석 ---------- */
   function renderCompany(){
