@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>가구공사 마진계산기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 상단 탭(계산 / 현장 목록 / 업체별 분석). 계산 탭은 왼쪽 입력, 오른쪽 고정 결과. 좁으면 한 열. */
+:root{
+  --bg:#f3f4f2; --paper:#ffffff; --ink:#1d2421; --muted:#66706b; --line:#dfe3e0;
+  --accent:#2f6b57; --accent-soft:#e3efe9; --good:#2f7a4a; --bad:#b33a2e; --field:#f8f9f8; --warn:#9a6a00;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --paper:#1c2320; --ink:#e6ebe8; --muted:#97a39d; --line:#2e3833;
+  --accent:#7cc4a6; --accent-soft:#22362e; --good:#7cd09a; --bad:#f08a7e; --field:#161c19; --warn:#e0b85a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --paper:#1c2320; --ink:#e6ebe8; --muted:#97a39d; --line:#2e3833;
+  --accent:#7cc4a6; --accent-soft:#22362e; --good:#7cd09a; --bad:#f08a7e; --field:#161c19; --warn:#e0b85a; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding-block:24px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px;margin-bottom:16px}
+h1{font-size:24px;margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+.tabs a{padding:10px 14px;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs a[aria-current="page"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tabs a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tabs .cnt{font-family:var(--f-num);font-size:12px;margin-left:4px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px 18px 20px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+h2{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin:0 0 12px}
+.info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.info{grid-template-columns:minmax(0,1fr)}}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+input,select{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;
+  padding:8px 10px;width:100%;box-sizing:border-box;min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+input.num{font-family:var(--f-num);text-align:right;font-variant-numeric:tabular-nums}
+.contract input{font-size:20px;font-weight:600;padding:10px 12px}
+.won{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.editing{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 14px;border-radius:8px;background:var(--accent-soft);font-size:14px}
+.editing b{font-weight:600}
+
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(120px,170px);gap:10px;align-items:center;
+  padding:12px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0;padding-top:0}
+.no{font-family:var(--f-num);color:var(--muted);font-size:13px}
+.name{font-weight:500}
+.hint{font-size:12px;color:var(--muted)}
+.amt{text-align:right;font-weight:600}
+.pb{grid-column:2 / -1;display:grid;grid-template-columns:minmax(0,1fr) 90px 120px minmax(90px,120px);gap:8px;align-items:center;font-size:13px;margin-top:6px}
+.pb .h{color:var(--muted);font-size:12px}
+.pb .r{text-align:right}
+.pb .t{font-weight:500}
+.pb input{padding:6px 8px}
+@media (max-width:560px){
+  .row{grid-template-columns:22px minmax(0,1fr)} .row>.amt,.row>.inp{grid-column:2}
+  .pb{grid-column:1 / -1;grid-template-columns:minmax(0,1fr) 64px 96px} .pb .sum{display:none}
+}
+.rate{display:inline-flex;align-items:center;gap:4px}
+.rate input{width:56px;padding:4px 6px}
+
+.result{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+.kv{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.kv:first-of-type{border-top:0}
+.kv span:first-child{color:var(--muted)}
+.big{margin-top:14px;padding:14px;border-radius:8px;background:var(--accent-soft)}
+.big .lab{font-size:12px;color:var(--muted);letter-spacing:.04em}
+.big .val{font-family:var(--f-num);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25;word-break:break-all}
+.big + .big{margin-top:10px}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:8px;display:flex}
+.bar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:12px;color:var(--muted)}
+.legend b{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line);
+  border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:600}
+button.primary:hover{opacity:.9;color:var(--paper)}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5;cursor:default}
+.saverow{display:flex;gap:8px;margin-top:16px}
+.saverow button{flex:1;padding:10px}
+.note{font-size:12px;color:var(--muted);margin-top:10px}
+.toast{font-size:13px;margin-top:8px;min-height:1.5em}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:end}
+.toolbar label.f{flex:1 1 160px}
+.tablebox{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th.r,td.r{text-align:right}
+td.n{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover{background:var(--field)}
+tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
+.pill{display:inline-block;font-family:var(--f-num);font-size:12px;padding:2px 8px;border-radius:99px;background:var(--accent-soft)}
+.pill.low{background:transparent;border:1px solid var(--warn);color:var(--warn)}
+.pill.neg{background:transparent;border:1px solid var(--bad);color:var(--bad)}
+.sitecell{min-width:140px}
+.sitecell small{display:block;color:var(--muted);font-size:12px}
+.empty{padding:28px 8px;text-align:center;color:var(--muted)}
+.status{font-size:13px;color:var(--warn);margin-bottom:10px}
+
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:700px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.tile .lab{font-size:12px;color:var(--muted)}
+.tile .val{font-family:var(--f-num);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;word-break:break-all}
+.mbar{display:flex;align-items:center;gap:8px;min-width:120px}
+.mbar span{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:block}
+.mbar i{display:block;height:100%;background:var(--accent)}
+.mbar i.neg{background:var(--bad)}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:14px;text-align:left}
+.linkbtn:hover{text-decoration:underline}
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>가구공사 마진계산기</h1>
+      <p class="sub">현장별로 계산하고 저장해 두면, 목록과 업체별 분석에서 모아 볼 수 있습니다. 저장한 현장은 이 브라우저에 보관됩니다.</p>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="화면">
+    <a href="#calc" data-tab="calc">계산</a>
+    <a href="#list" data-tab="list">현장 목록<span class="cnt" id="cntAll"></span></a>
+    <a href="#company" data-tab="company">업체별 분석</a>
+  </nav>
+
+  <p class="status" id="dbStatus" hidden></p>
+
+  <!-- 계산 -->
+  <div id="view-calc">
+    <div class="grid">
+      <div class="stack">
+        <div class="editing" id="editBar" hidden>
+          <span>저장된 현장 수정 중: <b id="editName"></b></span>
+          <button type="button" id="newBtn2">새 현장으로 전환</button>
+        </div>
+        <section>
+          <h2>현장 정보</h2>
+          <div class="info">
+            <label class="f">날짜<input id="date" type="date"></label>
+            <label class="f">업체<input id="company" type="text" placeholder="업체명" list="companyList" autocomplete="off"></label>
+            <label class="f">현장명<input id="site" type="text" placeholder="현장명"></label>
+          </div>
+          <datalist id="companyList"></datalist>
+          <label class="f contract" style="margin-top:14px">총공사금액 (원)
+            <input id="contract" class="num" inputmode="numeric" placeholder="0">
+          </label>
+        </section>
+
+        <section>
+          <h2>비용 목록</h2>
+          <div class="row" style="align-items:start">
+            <span class="no">1</span>
+            <div><div class="name">PB</div><div class="hint" id="priceHint">소요량(장)만 적으면 금액 자동계산 · 단가를 고치면 새 현장의 기본 단가로 저장</div></div>
+            <div class="amt won" id="pbTotal">0원</div>
+            <div class="pb">
+              <span class="h">규격</span><span class="h r">소요량(장)</span><span class="h r">장당 단가</span><span class="h r sum">금액</span>
+              <span class="t">15T</span><input id="q15" class="num" inputmode="decimal" placeholder="0"><input id="p15" class="num" inputmode="numeric"><span class="won r sum" id="s15">0</span>
+              <span class="t">18T</span><input id="q18" class="num" inputmode="decimal" placeholder="0"><input id="p18" class="num" inputmode="numeric"><span class="won r sum" id="s18">0</span>
+              <span class="t">우라</span><input id="qura" class="num" inputmode="decimal" placeholder="0"><input id="pura" class="num" inputmode="numeric"><span class="won r sum" id="sura">0</span>
+            </div>
+          </div>
+          <div class="row">
+            <span class="no">2</span>
+            <div><div class="name">기본기물</div>
+              <div class="hint">경첩·다릿발·걸레받이 등 · PB 금액 ×
+                <span class="rate"><input id="rate" class="num" inputmode="decimal">%</span></div></div>
+            <div class="amt won" id="hwTotal">0원</div>
+          </div>
+          <div class="row"><span class="no">3</span><div class="name">MD</div><div class="inp"><input id="md" class="num" inputmode="numeric" placeholder="0"></div></div>
+          <div class="row"><span class="no">4</span><div class="name">선택기물</div><div class="inp"><input id="opt" class="num" inputmode="numeric" placeholder="0"></div></div>
+          <div class="row"><span class="no">5</span><div class="name">대리석</div><div class="inp"><input id="marble" class="num" inputmode="numeric" placeholder="0"></div></div>
+          <div class="row"><span class="no">6</span><div class="name">시공비</div><div class="inp"><input id="labor" class="num" inputmode="numeric" placeholder="0"></div></div>
+        </section>
+      </div>
+
+      <aside class="result">
+        <section>
+          <h2>결과</h2>
+          <div class="kv"><span>총공사금액</span><span class="won" id="rContract">0원</span></div>
+          <div class="kv"><span>비용 총합계</span><span class="won" id="rCost">0원</span></div>
+          <div class="bar" id="bar"></div>
+          <div class="legend" id="legend"></div>
+          <div class="big"><div class="lab">공사 순마진</div><div class="val" id="rMargin">0원</div></div>
+          <div class="big"><div class="lab">공사 이익률</div><div class="val" id="rRate">–</div></div>
+          <div class="saverow">
+            <button type="button" class="primary" id="saveBtn">현장 저장</button>
+            <button type="button" id="newBtn">새 현장</button>
+          </div>
+          <div class="toast" id="toast" role="status"></div>
+          <p class="note">이익률 = 순마진 ÷ 총공사금액 × 100</p>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <!-- 현장 목록 -->
+  <div id="view-list" hidden>
+    <section>
+      <div class="toolbar">
+        <label class="f">업체<select id="fCompany"><option value="">전체 업체</option></select></label>
+        <label class="f">연도<select id="fYear"><option value="">전체 기간</option></select></label>
+        <label class="f">검색<input id="fSearch" type="search" placeholder="현장명 검색"></label>
+      </div>
+      <div class="tablebox">
+        <table>
+          <thead><tr><th>날짜</th><th>업체 / 현장</th><th class="r">총공사금액</th><th class="r">비용</th><th class="r">순마진</th><th class="r">이익률</th><th></th></tr></thead>
+          <tbody id="listBody"></tbody>
+          <tfoot id="listFoot"></tfoot>
+        </table>
+      </div>
+      <p class="note">행을 누르면 계산 화면에서 불러와 수정할 수 있습니다. 이익률 10% 미만은 노란색, 적자는 빨간색으로 표시됩니다.</p>
+    </section>
+  </div>
+
+  <!-- 업체별 분석 -->
+  <div id="view-company" hidden>
+    <div class="toolbar">
+      <label class="f" style="flex:0 1 200px">기간<select id="cYear"><option value="">전체 기간</option></select></label>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="lab">현장 수</div><div class="val" id="tCount">0</div></div>
+      <div class="tile"><div class="lab">총공사금액 합계</div><div class="val" id="tContract">0</div></div>
+      <div class="tile"><div class="lab">순마진 합계</div><div class="val" id="tMargin">0</div></div>
+      <div class="tile"><div class="lab">전체 이익률</div><div class="val" id="tRate">–</div></div>
+    </div>
+    <section>
+      <h2>업체별</h2>
+      <div class="tablebox">
+        <table>
+          <thead><tr><th>업체</th><th class="r">현장 수</th><th class="r">총공사금액</th><th class="r">비용</th><th class="r">순마진</th><th>이익률</th><th class="r">현장당 평균 마진</th><th>최근 공사</th></tr></thead>
+          <tbody id="compBody"></tbody>
+        </table>
+      </div>
+      <p class="note">이익률은 업체의 순마진 합계 ÷ 총공사금액 합계입니다. 업체 이름을 누르면 그 업체의 현장 목록으로 이동합니다.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+  const DRAFT='furn-margin-v1', PKEY='furn-margin-prices-v1', LKEY='furn-margin-projects-local';
+  const DEF_PRICES={p15:70000,p18:80000,pura:39000,rate:5};
+  const EXAMPLE={date:today(),company:'예시) 한빛인테리어',site:'예시) 아산 OO아파트 101동 1203호',
+    contract:12000000,q15:20,q18:35,qura:15,md:800000,opt:650000,marble:1200000,labor:2500000};
+  const $=id=>document.getElementById(id);
+  const FIELDS=['date','company','site','contract','q15','q18','qura','p15','p18','pura','rate','md','opt','marble','labor'];
+  const moneyIds=['contract','p15','p18','pura','md','opt','marble','labor'];
+  const priceIds=['p15','p18','pura','rate'];
+  const COLORS=['#5b8f7c','#a3b8a9','#c9a227','#7d6aa8','#9aa5a0','#c46a4f'];
+
+  function today(){const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)}
+  const fmt=n=>Math.round(n).toLocaleString('ko-KR');
+  const parse=v=>{const n=parseFloat(String(v??'').replace(/[^0-9.\-]/g,''));return isNaN(n)?0:n};
+  const val=id=>parse($(id).value);
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function lget(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+  function lset(k,o){try{localStorage.setItem(k,JSON.stringify(o))}catch(e){}}
+
+  let projects=[];      // [{id,...}]
+  let editingId=null;
+  let prices=Object.assign({},DEF_PRICES,lget(PKEY)||{});
+  let store=null;       // db or null
+
+  /* ---------- 계산 ---------- */
+  function setVal(id,v){
+    if(v===undefined||v===null||v===''){$(id).value='';return}
+    $(id).value=moneyIds.includes(id)?fmt(parse(v)):v;
+  }
+  function compute(d){
+    const s15=parse(d.q15)*parse(d.p15), s18=parse(d.q18)*parse(d.p18), sura=parse(d.qura)*parse(d.pura);
+    const pb=s15+s18+sura, hw=pb*parse(d.rate)/100;
+    const items=[['PB',pb],['기본기물',hw],['MD',parse(d.md)],['선택기물',parse(d.opt)],['대리석',parse(d.marble)],['시공비',parse(d.labor)]];
+    const cost=items.reduce((a,b)=>a+b[1],0), contract=parse(d.contract), margin=contract-cost;
+    return {s15,s18,sura,pb,hw,items,cost,contract,margin,rate:contract>0?margin/contract*100:null};
+  }
+  function formData(){const d={};FIELDS.forEach(k=>d[k]=moneyIds.includes(k)?val(k):($(k).value));
+    ['q15','q18','qura','rate'].forEach(k=>d[k]=val(k));return d}
+
+  function calc(){
+    const d=formData(), c=compute(d);
+    $('s15').textContent=fmt(c.s15); $('s18').textContent=fmt(c.s18); $('sura').textContent=fmt(c.sura);
+    $('pbTotal').textContent=fmt(c.pb)+'원'; $('hwTotal').textContent=fmt(c.hw)+'원';
+    $('rContract').textContent=fmt(c.contract)+'원'; $('rCost').textContent=fmt(c.cost)+'원';
+    const m=$('rMargin'); m.textContent=fmt(c.margin)+'원'; m.className='val '+(c.margin<0?'neg':'pos');
+    const r=$('rRate');
+    if(c.rate!==null){r.textContent=c.rate.toFixed(1)+'%';r.className='val '+(c.margin<0?'neg':'pos')}else{r.textContent='–';r.className='val'}
+    const bar=$('bar'),lg=$('legend');bar.innerHTML='';lg.innerHTML='';
+    c.items.forEach(([n,v],i)=>{
+      if(c.cost>0&&v>0){const e=document.createElement('i');e.style.width=(v/c.cost*100)+'%';e.style.background=COLORS[i];bar.appendChild(e)}
+      const s=document.createElement('span');const b=document.createElement('b');b.style.background=COLORS[i];
+      s.appendChild(b);s.appendChild(document.createTextNode(n+' '+(c.cost>0?Math.round(v/c.cost*100):0)+'%'));lg.appendChild(s);
+    });
+    lset(DRAFT,Object.assign({editingId},d));
+  }
+
+  function fillForm(d){FIELDS.forEach(k=>setVal(k,d[k]));calc()}
+  function updateEditBar(){
+    const p=projects.find(x=>x.id===editingId);
+    $('editBar').hidden=!editingId;
+    $('editName').textContent=p?((p.company||'업체 없음')+' · '+(p.site||'현장명 없음')):'';
+    $('saveBtn').textContent=editingId?'변경 저장':'현장 저장';
+    $('priceHint').textContent=editingId?'소요량(장)만 적으면 금액 자동계산 · 이 현장의 단가는 이 현장에만 적용':'소요량(장)만 적으면 금액 자동계산 · 단가를 고치면 새 현장의 기본 단가로 저장';
+  }
+  function newProject(){
+    editingId=null;
+    fillForm(Object.assign({date:today()},prices));
+    updateEditBar(); toast('');
+    $('company').focus();
+  }
+  function toast(msg,bad){const t=$('toast');t.textContent=msg;t.className='toast'+(bad?' neg':'')}
+
+  document.querySelectorAll('#view-calc input').forEach(el=>{
+    el.addEventListener('input',()=>{
+      if(moneyIds.includes(el.id)){
+        const pos=el.value.length-el.selectionStart, raw=el.value.replace(/[^0-9]/g,'');
+        el.value=raw?fmt(+raw):'';
+        const p=Math.max(0,el.value.length-pos);try{el.setSelectionRange(p,p)}catch(e){}
+      }
+      if(priceIds.includes(el.id)&&!editingId) savePrices();
+      calc();
+    });
+    if(el.classList.contains('num')) el.addEventListener('focus',()=>el.select());
+  });
+
+  let priceTimer=null;
+  function savePrices(){
+    prices={p15:val('p15'),p18:val('p18'),pura:val('pura'),rate:val('rate')};
+    lset(PKEY,prices);
+    if(store){clearTimeout(priceTimer);priceTimer=setTimeout(()=>{store.doc('settings/prices').set(prices).catch(()=>{})},800)}
+  }
+
+  let saving=false;
+  $('saveBtn').addEventListener('click',async()=>{
+    if(saving)return;
+    const d=formData();
+    if(!d.company.trim()||!d.site.trim()){toast('업체와 현장명을 입력해야 저장할 수 있습니다.',true);return}
+    const c=compute(d);
+    const rec=Object.assign({},d,{company:d.company.trim(),site:d.site.trim(),pb:c.pb,hw:c.hw,cost:c.cost,margin:c.margin,updatedAt:new Date().toISOString()});
+    saving=true;$('saveBtn').disabled=true;
+    try{
+      const id=editingId||('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
+      await putProject(id,rec);
+      editingId=id; updateEditBar();
+      toast('저장했습니다. 현장 목록에서 볼 수 있습니다.');
+    }catch(e){
+      toast(e&&e.code==='quota_exceeded'?'저장 공간이 가득 찼습니다. 오래된 현장을 삭제한 뒤 다시 저장하세요.':'저장하지 못했습니다. 잠시 후 다시 눌러 주세요.',true);
+    }finally{saving=false;$('saveBtn').disabled=false}
+  });
+  $('newBtn').addEventListener('click',newProject);
+  $('newBtn2').addEventListener('click',newProject);
+
+  /* ---------- 저장소 ---------- */
+  async function putProject(id,rec){
+    if(store){await store.collection('projects').doc(id).set(rec)}
+    else{const i=projects.findIndex(p=>p.id===id);const r=Object.assign({id},rec);
+      if(i>=0)projects[i]=r;else projects.push(r);lset(LKEY,projects);onProjects()}
+  }
+  async function delProject(id){
+    if(store){await store.collection('projects').doc(id).delete()}
+    else{projects=projects.filter(p=>p.id!==id);lset(LKEY,projects);onProjects()}
+    if(editingId===id){editingId=null;updateEditBar()}
+  }
+
+  function onProjects(){
+    projects.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    $('cntAll').textContent=projects.length?String(projects.length):'';
+    const comps=[...new Set(projects.map(p=>p.company).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+    $('companyList').innerHTML=comps.map(c=>'<option value="'+esc(c)+'">').join('');
+    const fc=$('fCompany'),cur=fc.value;
+    fc.innerHTML='<option value="">전체 업체</option>'+comps.map(c=>'<option>'+esc(c)+'</option>').join('');
+    fc.value=comps.includes(cur)?cur:'';
+    const years=[...new Set(projects.map(p=>(p.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+    ['fYear','cYear'].forEach(id=>{const s=$(id),v=s.value;
+      s.innerHTML='<option value="">전체 기간</option>'+years.map(y=>'<option value="'+y+'">'+y+'년</option>').join('');
+      s.value=years.includes(v)?v:''});
+    updateEditBar(); renderList(); renderCompany();
+  }
+
+  function ratePill(margin,contract){
+    if(!(contract>0))return '<span class="pill">–</span>';
+    const r=margin/contract*100, cls=r<0?'neg':(r<10?'low':'');
+    return '<span class="pill '+cls+'">'+r.toFixed(1)+'%</span>';
+  }
+
+  /* ---------- 현장 목록 ---------- */
+  let pendingDel=null;
+  function renderList(){
+    const fc=$('fCompany').value, fy=$('fYear').value, q=$('fSearch').value.trim().toLowerCase();
+    const rows=projects.filter(p=>(!fc||p.company===fc)&&(!fy||(p.date||'').startsWith(fy))&&(!q||(p.site||'').toLowerCase().includes(q)||(p.company||'').toLowerCase().includes(q)));
+    const body=$('listBody');
+    if(!rows.length){
+      body.innerHTML='<tr><td colspan="7" class="empty">'+(projects.length?'조건에 맞는 현장이 없습니다.':'아직 저장된 현장이 없습니다. 계산 탭에서 입력한 뒤 “현장 저장”을 누르면 여기에 쌓입니다.')+'</td></tr>';
+      $('listFoot').innerHTML='';return;
+    }
+    body.innerHTML=rows.map(p=>{
+      const m=parse(p.margin), del=pendingDel===p.id
+        ?'<button type="button" class="danger" data-delok="'+esc(p.id)+'">삭제 확인</button> <button type="button" data-delno="1">취소</button>'
+        :'<button type="button" class="danger" data-del="'+esc(p.id)+'">삭제</button>';
+      return '<tr class="click" data-open="'+esc(p.id)+'"><td class="n" style="text-align:left">'+esc(p.date)+'</td>'+
+        '<td class="sitecell">'+esc(p.site)+'<small>'+esc(p.company)+'</small></td>'+
+        '<td class="n">'+fmt(parse(p.contract))+'</td><td class="n">'+fmt(parse(p.cost))+'</td>'+
+        '<td class="n '+(m<0?'neg':'')+'">'+fmt(m)+'</td><td class="r">'+ratePill(m,parse(p.contract))+'</td>'+
+        '<td class="r" style="white-space:nowrap">'+del+'</td></tr>';
+    }).join('');
+    const sc=rows.reduce((a,p)=>a+parse(p.contract),0), so=rows.reduce((a,p)=>a+parse(p.cost),0), sm=rows.reduce((a,p)=>a+parse(p.margin),0);
+    $('listFoot').innerHTML='<tr><td colspan="2">합계 '+rows.length+'건</td><td class="n">'+fmt(sc)+'</td><td class="n">'+fmt(so)+'</td><td class="n '+(sm<0?'neg':'')+'">'+fmt(sm)+'</td><td class="r">'+ratePill(sm,sc)+'</td><td></td></tr>';
+  }
+  $('listBody').addEventListener('click',async e=>{
+    const t=e.target;
+    if(t.dataset.del){e.stopPropagation();pendingDel=t.dataset.del;renderList();return}
+    if(t.dataset.delno){e.stopPropagation();pendingDel=null;renderList();return}
+    if(t.dataset.delok){e.stopPropagation();const id=t.dataset.delok;pendingDel=null;
+      try{await delProject(id)}catch(err){alertBar('삭제하지 못했습니다. 잠시 후 다시 시도하세요.')}return}
+    const tr=t.closest('tr[data-open]'); if(!tr)return;
+    const p=projects.find(x=>x.id===tr.dataset.open); if(!p)return;
+    editingId=p.id; fillForm(p); updateEditBar(); toast(''); location.hash='calc';
+  });
+  ['fCompany','fYear'].forEach(id=>$(id).addEventListener('change',renderList));
+  $('fSearch').addEventListener('input',renderList);
+
+  /* ---------- 업체별 분석 ---------- */
+  function renderCompany(){
+    const fy=$('cYear').value;
+    const rows=projects.filter(p=>!fy||(p.date||'').startsWith(fy));
+    const map=new Map();
+    rows.forEach(p=>{const k=p.company||'(업체 없음)';const g=map.get(k)||{name:k,n:0,c:0,o:0,m:0,last:''};
+      g.n++;g.c+=parse(p.contract);g.o+=parse(p.cost);g.m+=parse(p.margin);if((p.date||'')>g.last)g.last=p.date;map.set(k,g)});
+    const groups=[...map.values()].sort((a,b)=>b.m-a.m);
+    const tc=rows.reduce((a,p)=>a+parse(p.contract),0), tm=rows.reduce((a,p)=>a+parse(p.margin),0);
+    $('tCount').textContent=rows.length+'건';
+    $('tContract').textContent=fmt(tc)+'원';
+    $('tMargin').textContent=fmt(tm)+'원'; $('tMargin').className='val '+(tm<0?'neg':'');
+    $('tRate').textContent=tc>0?(tm/tc*100).toFixed(1)+'%':'–';
+    const body=$('compBody');
+    if(!groups.length){body.innerHTML='<tr><td colspan="8" class="empty">저장된 현장이 쌓이면 업체별로 공사 금액, 순마진, 이익률을 비교해 보여 줍니다.</td></tr>';return}
+    const maxRate=Math.max(1,...groups.map(g=>g.c>0?Math.abs(g.m/g.c*100):0));
+    body.innerHTML=groups.map(g=>{
+      const r=g.c>0?g.m/g.c*100:0;
+      return '<tr><td><button type="button" class="linkbtn" data-comp="'+esc(g.name)+'">'+esc(g.name)+'</button></td>'+
+        '<td class="n">'+g.n+'</td><td class="n">'+fmt(g.c)+'</td><td class="n">'+fmt(g.o)+'</td>'+
+        '<td class="n '+(g.m<0?'neg':'')+'">'+fmt(g.m)+'</td>'+
+        '<td><div class="mbar"><span><i class="'+(r<0?'neg':'')+'" style="width:'+(Math.abs(r)/maxRate*100).toFixed(1)+'%"></i></span>'+ratePill(g.m,g.c)+'</div></td>'+
+        '<td class="n">'+fmt(g.m/g.n)+'</td><td class="n" style="text-align:left">'+esc(g.last)+'</td></tr>';
+    }).join('');
+  }
+  $('cYear').addEventListener('change',renderCompany);
+  $('compBody').addEventListener('click',e=>{
+    const c=e.target.dataset.comp; if(c===undefined)return;
+    $('fCompany').value=c; $('fYear').value=$('cYear').value; $('fSearch').value=''; renderList(); location.hash='list';
+  });
+
+  /* ---------- 탭 ---------- */
+  function route(){
+    const t=['calc','list','company'].includes(location.hash.slice(1))?location.hash.slice(1):'calc';
+    ['calc','list','company'].forEach(k=>$('view-'+k).hidden=k!==t);
+    document.querySelectorAll('.tabs a').forEach(a=>{if(a.dataset.tab===t)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  }
+  window.addEventListener('hashchange',route);
+
+  function alertBar(msg){const s=$('dbStatus');s.textContent=msg;s.hidden=!msg}
+
+  /* ---------- 시작 ---------- */
+  const draft=lget(DRAFT);
+  if(draft){editingId=draft.editingId||null;fillForm(draft)}
+  else fillForm(Object.assign({},EXAMPLE,prices));
+  route();
+  projects=(lget(LKEY)||[]); onProjects();
+
+  (async()=>{
+    let db=null;
+    try{db=window.claude&&window.claude.use?await window.claude.use('db'):null}catch(e){db=null}
+    if(!db){if(window.claude)alertBar('이 화면에서는 서버 저장소를 쓸 수 없어 이 브라우저에만 저장합니다.');return}
+    store=db;
+    const localOnly=lget(LKEY)||[];
+    projects=[]; onProjects();
+    let timer=setTimeout(()=>alertBar('저장된 현장을 불러오는 중입니다. 연결이 느리면 잠시 뒤 다시 열어 보세요.'),10000);
+    db.doc('settings/prices').get().then(s=>{
+      if(s.exists&&!editingId&&!lget(PKEY)){prices=Object.assign({},DEF_PRICES,s.data());}
+      else if(s.exists){prices=Object.assign({},DEF_PRICES,s.data())}
+    }).catch(()=>{});
+    db.collection('projects').onSnapshot(snap=>{
+      projects=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      if(!snap.metadata.fromCache){clearTimeout(timer);alertBar('')}
+      onProjects();
+      if(localOnly.length&&!snap.metadata.fromCache){ // 이전에 브라우저에만 저장된 현장 옮기기
+        const ids=new Set(projects.map(p=>p.id)); const list=localOnly.splice(0);
+        (async()=>{for(const p of list){if(!ids.has(p.id)){const {id,...rec}=p;try{await db.collection('projects').doc(id).set(rec)}catch(e){}}}lset(LKEY,[])})();
+      }
+    },err=>{clearTimeout(timer);
+      store=null; projects=lget(LKEY)||[]; onProjects();
+      alertBar(err&&err.code==='revoked'?'저장소 접근 권한이 없어 이 브라우저에만 저장합니다.':'서버 저장소에 연결하지 못해 이 브라우저에만 저장합니다.');
+    });
+  })();
+})();
+</script>
+
+</body>
+</html>
