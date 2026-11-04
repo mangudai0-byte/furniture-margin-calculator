@@ -4,7 +4,7 @@
  * 1) 아래 TEAM_CODE를 직원들과 공유할 비밀번호로 바꾸세요. (예: 'hanbit-2026')
  * 2) 배포 → 새 배포 → 유형: 웹 앱, 실행 사용자: 나, 액세스 권한: 모든 사용자
  */
-const TEAM_CODE = '여기에-팀-코드를-적으세요';
+const TEAM_CODE = '0722';
 
 const SHEET_PROJECTS = '현장';
 const SHEET_SETTINGS = '설정';
