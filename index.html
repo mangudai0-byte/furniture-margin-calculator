@@ -135,6 +135,13 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
 .state{margin:0;font-weight:600}
 .copyrow{display:flex;gap:8px}
 .copyrow input{font-family:var(--f-num);font-size:12px}
+.joinbox{border-color:var(--accent);display:flex;flex-direction:column;gap:10px}
+.joinbox b{font-size:15px;margin-right:8px}
+.joinrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+.joinrow button{padding:9px 18px}
+@media (max-width:560px){.joinrow{grid-template-columns:minmax(0,1fr)}}
+.joinbox .toast{margin:0;min-height:0}
+.joinbox .toast:empty{display:none}
 .backup{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;
   padding:12px 14px;margin-bottom:14px;border:1px dashed var(--line);border-radius:8px}
 .backup b{font-size:14px;margin-right:8px}
@@ -166,6 +173,16 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
   <div id="view-calc">
     <div class="grid">
       <div class="stack">
+        <section class="joinbox" id="joinBox" hidden>
+          <div><b>공용 저장소에 연결하기</b>
+            <span class="hint">팀 코드와 이름을 넣으면 모든 직원과 같은 현장 목록을 씁니다. 처음 한 번만 하면 됩니다.</span></div>
+          <div class="joinrow">
+            <label class="f">팀 코드<input id="joinCode" type="password" inputmode="numeric" autocomplete="off"></label>
+            <label class="f">내 이름<input id="joinName" type="text" placeholder="예: 김대리" autocomplete="name"></label>
+            <button type="button" class="primary" id="joinBtn">연결</button>
+          </div>
+          <div class="toast" id="joinMsg" role="status"></div>
+        </section>
         <div class="editing" id="editBar" hidden>
           <span>저장된 현장 수정 중: <b id="editName"></b></span>
           <button type="button" id="newBtn2">새 현장으로 전환</button>
@@ -320,6 +337,7 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
 <script>
 (function(){
   const DRAFT='furn-margin-v1', PKEY='furn-margin-prices-v1', LKEY='furn-margin-projects-local', CKEY='furn-margin-remote-v1', RKEY='furn-margin-remote-cache';
+  const DEFAULT_URL='https://script.google.com/macros/s/AKfycbynWhFBjMFuzSEQ4RI7QYotVGBqnAINo40jekqDwartIPCF--DVrK7TA_1nR9R-5I4wZQ/exec';
   const DEF_PRICES={p15:70000,p18:80000,pura:39000,rate:5};
   const EXAMPLE={date:today(),company:'예시) 한빛인테리어',site:'예시) 아산 OO아파트 101동 1203호',
     contract:12000000,q15:20,q18:35,qura:15,md:800000,opt:650000,marble:1200000,labor:2500000};
@@ -612,11 +630,12 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
     p.className='conn'+(state==='on'?' on':state==='err'?' err':'');
     p.textContent=!remote?'이 기기에만 저장':state==='err'?'공용 저장소 연결 안 됨':'공용 저장소 연결됨';
     $('shareDot').className='dot'+(remote&&state!=='err'?' on':'');
+    $('joinBox').hidden=!!remote;
   }
   function b64e(o){return btoa(unescape(encodeURIComponent(JSON.stringify(o))))}
   function b64d(t){return JSON.parse(decodeURIComponent(escape(atob(t))))}
   function renderShare(){
-    $('cfgUrl').value=remote?remote.url:$('cfgUrl').value;
+    $('cfgUrl').value=remote?remote.url:($('cfgUrl').value||DEFAULT_URL);
     if(remote){$('cfgCode').value=remote.code;$('cfgName').value=remote.name||''}
     $('disconnectBtn').hidden=!remote;
     $('connectBtn').textContent=remote?'다시 연결 / 이름 저장':'연결하기';
@@ -650,6 +669,18 @@ tfoot td{font-weight:600;border-bottom:0;border-top:2px solid var(--line)}
     if(!code){cfgMsg('팀 코드를 입력하세요.',true);return}
     connect({url,code,name});
   });
+  $('joinBtn').addEventListener('click',async()=>{
+    const code=$('joinCode').value.trim(), name=$('joinName').value.trim(), m=$('joinMsg');
+    if(!code){m.textContent='팀 코드를 입력하세요.';m.className='toast neg';return}
+    if(!name){m.textContent='이름을 입력하세요. 저장한 사람으로 기록됩니다.';m.className='toast neg';return}
+    $('joinBtn').disabled=true; m.className='toast'; m.textContent='연결하는 중…';
+    const ok=await connect({url:DEFAULT_URL,code,name});
+    $('joinBtn').disabled=false;
+    if(ok){m.textContent='';toast('공용 저장소에 연결했습니다. 이제 저장하면 모든 직원이 함께 봅니다.')}
+    else{m.textContent=$('cfgMsg').textContent;m.className='toast neg'}
+  });
+  $('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('joinName').focus()});
+  $('joinName').addEventListener('keydown',e=>{if(e.key==='Enter')$('joinBtn').click()});
   $('disconnectBtn').addEventListener('click',()=>{
     remote=null; try{localStorage.removeItem(CKEY);localStorage.removeItem(RKEY)}catch(e){}
     projects=lget(LKEY)||[]; setConn(); onProjects(); renderShare(); alertBar('');
